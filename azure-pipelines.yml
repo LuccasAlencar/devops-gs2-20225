@@ -5,218 +5,317 @@
 trigger:
   branches:
     include:
-    - main
+      - main
+      - master
   paths:
     exclude:
-    - README.md
-    - tarefas.txt
+      - README.md
+      - tarefas.txt
 
 pr:
   branches:
     include:
-    - main
+      - main
+      - master
+
+pool:
+  vmImage: 'ubuntu-latest'
 
 variables:
-  # Configurações do projeto
-  buildConfiguration: 'Release'
-  project: 'dotnet-gs2-2025.csproj'
-  dockerfilePath: '$(Build.SourcesDirectory)/dockerfiles/Dockerfile'
-  location: 'canadacentral'
+  # Importar Variable Group (se existir)
+  # - group: devops-gs2-2025-secrets
   
-  # Configurações Azure (devem ser configuradas no Variable Group)
-  azureSubscription: 'AzureSubscription'
-  resourceGroupName: 'rg-devops-gs2-2025'
-  containerRegistry: 'acrdevopsgs22025.azurecr.io'
-  containerName: 'aci-devops-gs2-2025'
-  imageName: 'devops-gs2-2025:$(Build.BuildId)'
+  # Configurações do projeto
+  - name: buildConfiguration
+    value: 'Release'
+  - name: project
+    value: 'dotnet-gs2-2025.csproj'
+  - name: dockerfilePath
+    value: '$(Build.SourcesDirectory)/dockerfiles/Dockerfile'
+  
+  # Configurações do Azure
+  - name: azureSubscription
+    value: 'azure-service-connection'
+  - name: resourceGroup
+    value: 'rg-devops-gs2-2025'
+  - name: location
+    value: 'canadacentral'
+  - name: acrName
+    value: 'acrdevopsgs22025'
+  - name: aciName
+    value: 'aci-devops-gs2-2025'
+  - name: imageName
+    value: 'devops-gs2-2025'
+  - name: tag
+    value: '$(Build.BuildId)'
+  
+  # Configurações do MySQL Container Instance
+  - name: mysqlContainerName
+    value: 'aci-mysql-server'
+  - name: mysqlDatabase
+    value: 'devops_gs2_2025'
+  - name: mysqlUser
+    value: 'devopsadmin'
+  - name: mysqlPassword
+    value: 'DevOps@2025!GS2'
 
 stages:
-- stage: Build
-  displayName: 'Build Stage'
-  jobs:
-  - job: Build
-    displayName: 'Build Application'
-    pool:
-      vmImage: 'ubuntu-latest'
-    
-    steps:
-    - task: UseDotNet@2
-      displayName: 'Install .NET 8 SDK'
-      inputs:
-        packageType: 'sdk'
-        version: '8.x'
-    
-    - task: DotNetCoreCLI@2
-      displayName: 'Restore NuGet Packages'
-      inputs:
-        command: 'restore'
-        projects: '$(project)'
-    
-    - task: DotNetCoreCLI@2
-      displayName: 'Build Application'
-      inputs:
-        command: 'build'
-        projects: '$(project)'
-        arguments: '--configuration $(buildConfiguration) --no-restore'
-    
-    - task: DotNetCoreCLI@2
-      displayName: 'Run Unit Tests'
-      inputs:
-        command: 'test'
-        projects: '**/*Tests.csproj'
-        arguments: '--configuration $(buildConfiguration) --no-build --no-restore --collect:"XPlat Code Coverage" --logger trx'
-        publishTestResults: true
-    
-    - task: PublishCodeCoverageResults@2
-      displayName: 'Publish Code Coverage'
-      inputs:
-        summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
-        codecoverageTool: 'Cobertura'
-    
-    - task: DotNetCoreCLI@2
-      displayName: 'Publish Application'
-      inputs:
-        command: 'publish'
-        projects: '$(project)'
-        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory) --no-build'
-        zipAfterPublish: false
-    
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish Build Artifacts'
-      inputs:
-        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-        ArtifactName: 'drop'
-        publishLocation: 'Container'
+  # STAGE 1: BUILD - Compilação e Testes
+  - stage: Build
+    displayName: 'Build e Testes'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build .NET Application'
+        steps:
+          - task: UseDotNet@2
+            displayName: 'Install .NET 8 SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '8.x'
 
-- stage: BuildAndPushDocker
-  displayName: 'Docker Build and Push'
-  dependsOn: Build
-  condition: succeeded()
-  jobs:
-  - job: Docker
-    displayName: 'Build and Push Docker Image'
-    pool:
-      vmImage: 'ubuntu-latest'
-    
-    steps:
-    - task: DownloadBuildArtifacts@0
-      displayName: 'Download Build Artifacts'
-      inputs:
-        buildType: 'current'
-        downloadType: 'single'
-        artifactName: 'drop'
-        downloadPath: '$(System.ArtifactsDirectory)'
-    
-    - task: Docker@2
-      displayName: 'Build Docker Image'
-      inputs:
-        containerRegistry: '$(azureSubscription)'
-        repository: '$(containerRegistry)/$(imageName)'
-        command: 'build'
-        Dockerfile: '$(dockerfilePath)'
-        buildContext: '$(System.ArtifactsDirectory)/drop'
-        tags: |
-          $(Build.BuildId)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Push Docker Image'
-      inputs:
-        containerRegistry: '$(azureSubscription)'
-        repository: '$(containerRegistry)/$(imageName)'
-        command: 'push'
-        tags: |
-          $(Build.BuildId)
-          latest
+          - task: DotNetCoreCLI@2
+            displayName: 'Restore NuGet Packages'
+            inputs:
+              command: 'restore'
+              projects: '$(project)'
 
-- stage: Deploy
-  displayName: 'Release Stage'
-  dependsOn: BuildAndPushDocker
-  condition: succeeded()
-  jobs:
-  - deployment: DeployToAzure
-    displayName: 'Deploy to Azure Container Instance'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
+          - task: DotNetCoreCLI@2
+            displayName: 'Build .NET Application'
+            inputs:
+              command: 'build'
+              projects: '$(project)'
+              arguments: '--configuration $(buildConfiguration) --no-restore'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Run Unit Tests'
+            inputs:
+              command: 'test'
+              projects: '**/*Tests.csproj'
+              arguments: '--configuration $(buildConfiguration) --no-build --no-restore --collect:"XPlat Code Coverage" --logger trx'
+              publishTestResults: true
+
+          - task: PublishCodeCoverageResults@2
+            displayName: 'Publish Code Coverage'
+            inputs:
+              summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+              codecoverageTool: 'Cobertura'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Publish .NET Application'
+            inputs:
+              command: 'publish'
+              projects: '$(project)'
+              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory) --no-build'
+              zipAfterPublish: false
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publicar Artefatos'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+
+  # STAGE 2: IMAGE - Build e Push da Imagem Docker
+  - stage: Image
+    displayName: 'Build e Push Docker Image'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: DockerJob
+        displayName: 'Build Docker Image'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
           - task: AzureCLI@2
-            displayName: 'Deploy to Azure Container Instance'
+            displayName: 'Build e Push Docker Image'
             inputs:
               azureSubscription: '$(azureSubscription)'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
-                # Configurações do ACI
-                RESOURCE_GROUP="$(resourceGroupName)"
-                CONTAINER_NAME="$(containerName)"
-                IMAGE_NAME="$(containerRegistry)/$(imageName):$(Build.BuildId)"
-                
-                # Verificar se o container já existe e deletar antes de criar
-                if az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --output none 2>/dev/null; then
-                  echo "Container exists, deleting and recreating..."
-                  az container delete \
-                    --resource-group $RESOURCE_GROUP \
-                    --name $CONTAINER_NAME \
-                    --yes
-                else
-                  echo "Creating new container..."
-                fi
-                
-                # Criar container com nova imagem
-                az container create \
-                  --resource-group $RESOURCE_GROUP \
-                  --name $CONTAINER_NAME \
-                  --image $IMAGE_NAME \
-                  --cpu 1 \
-                  --memory 2 \
-                  --ports 8080 \
-                  --dns-name-label $CONTAINER_NAME \
-                  --restart-policy Always \
-                  --environment-variables \
-                    ASPNETCORE_ENVIRONMENT=Production \
-                    ASPNETCORE_URLS=http://+:8080
-                
-                # Obter URL do container
-                echo "Container deployed successfully!"
-                echo "URL: http://$(az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --query ipAddress.fqdn --output tsv):8080"
+                echo " Login no Azure Container Registry..."
+                az acr login --name $(acrName)
 
-- stage: DatabaseSetup
-  displayName: 'Database Setup'
-  dependsOn: Deploy
-  condition: succeeded()
-  jobs:
-  - job: SetupDatabase
-    displayName: 'Setup MySQL Database'
-    pool:
-      vmImage: 'ubuntu-latest'
-    
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Execute Database Script'
-      inputs:
-        azureSubscription: '$(azureSubscription)'
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          # Configurações do MySQL Container Instance
-          RESOURCE_GROUP="$(resourceGroupName)"
-          MYSQL_CONTAINER="aci-mysql-server"
-          MYSQL_DATABASE="devops_gs2_2025"
-          MYSQL_USER="devopsadmin"
-          MYSQL_PASSWORD="DevOps@2025!GS2"
-          
-          # Esperar MySQL estar pronto
-          echo "Waiting for MySQL to be ready..."
-          sleep 30
-          
-          # Converter script SQL para base64 e executar
-          SCRIPT_B64=$(base64 -w 0 < "$(Build.SourcesDirectory)/scripts/script-bd.sql")
-          
-          # Executar script no container MySQL
-          az container exec \
-            --resource-group $RESOURCE_GROUP \
-            --name $MYSQL_CONTAINER \
-            --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -pDevOps@2025!GS2'"
-          
-          echo "Database setup completed successfully!"
+                echo "  Build da imagem Docker..."
+                docker build -t $(acrName).azurecr.io/$(imageName):$(tag) -f $(dockerfilePath) .
+                docker tag $(acrName).azurecr.io/$(imageName):$(tag) $(acrName).azurecr.io/$(imageName):latest
+                
+                echo " Push da imagem para ACR..."
+                docker push $(acrName).azurecr.io/$(imageName):$(tag)
+                docker push $(acrName).azurecr.io/$(imageName):latest
+
+                echo " Imagem publicada com sucesso!"
+                echo "   - $(acrName).azurecr.io/$(imageName):$(tag)"
+                echo "   - $(acrName).azurecr.io/$(imageName):latest"
+
+  # STAGE 3: DEPLOY - Deploy para Azure Container Instance
+  - stage: Deploy
+    displayName: 'Deploy to Azure ACI'
+    dependsOn: Image
+    condition: succeeded()
+    jobs:
+      - deployment: DeployACI
+        displayName: 'Deploy to Container Instance'
+        environment: 'devops-gs2-2025'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Verificar/Criar MySQL Container Instance'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo " Verificando MySQL Container Instance..."
+                      
+                      # Verificar se o container MySQL já existe
+                      if az container show \
+                          --resource-group $(resourceGroup) \
+                          --name $(mysqlContainerName) &>/dev/null; then
+                        echo " MySQL Container já existe"
+                      else
+                        echo " Criando MySQL Container Instance..."
+                        
+                        # Criar MySQL Container
+                        az container create \
+                          --resource-group $(resourceGroup) \
+                          --name $(mysqlContainerName) \
+                          --image mysql:8.0 \
+                          --dns-name-label mysql-$(resourceGroup) \
+                          --ports 3306 \
+                          --cpu 1 \
+                          --memory 2 \
+                          --environment-variables \
+                            MYSQL_ROOT_PASSWORD=$(mysqlPassword) \
+                            MYSQL_DATABASE=$(mysqlDatabase) \
+                            MYSQL_USER=$(mysqlUser) \
+                            MYSQL_PASSWORD=$(mysqlPassword) \
+                          --restart-policy Always \
+                          --location $(location)
+                        
+                        echo " MySQL Container criado"
+                        
+                        # Aguardar o MySQL ficar pronto
+                        echo " Aguardando MySQL ficar pronto..."
+                        sleep 90
+                      fi
+                      
+                      # Obter FQDN do MySQL
+                      MYSQL_HOST=$(az container show \
+                        --resource-group $(resourceGroup) \
+                        --name $(mysqlContainerName) \
+                        --query "ipAddress.fqdn" -o tsv)
+                      
+                      echo "MySQL Host: $MYSQL_HOST"
+                      echo "##vso[task.setvariable variable=MYSQL_HOST]$MYSQL_HOST"
+
+                - task: AzureCLI@2
+                  displayName: 'Executar Script SQL no MySQL'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo " Executando script SQL..."
+                      
+                      # Esperar MySQL estar pronto
+                      echo " Aguardando MySQL iniciar..."
+                      sleep 30
+                      
+                      # Converter script SQL para base64 e executar
+                      SCRIPT_B64=$(base64 -w 0 < "$(Build.SourcesDirectory)/scripts/script-bd.sql")
+                      
+                      # Executar script no container MySQL
+                      az container exec \
+                        --resource-group $(resourceGroup) \
+                        --name $(mysqlContainerName) \
+                        --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -p$(mysqlPassword)'" && echo " Script SQL executado com sucesso" || {
+                        echo "  Tentando novamente em 30 segundos..."
+                        sleep 30
+                        az container exec \
+                          --resource-group $(resourceGroup) \
+                          --name $(mysqlContainerName) \
+                          --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -p$(mysqlPassword)'" && echo " Script SQL executado" || {
+                          echo "  Execute manualmente depois se necessário"
+                        }
+                      }
+
+                - task: AzureCLI@2
+                  displayName: 'Deploy to ACI'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo " Iniciando deploy no Azure Container Instance..."
+                      
+                      # Obter credenciais do ACR
+                      ACR_USERNAME=$(az acr credential show \
+                        --name $(acrName) \
+                        --query "username" -o tsv)
+
+                      ACR_PASSWORD=$(az acr credential show \
+                        --name $(acrName) \
+                        --query "passwords[0].value" -o tsv)
+
+                      # Deletar container existente se houver
+                      az container delete \
+                        --resource-group $(resourceGroup) \
+                        --name $(aciName) \
+                        --yes 2>/dev/null || true
+
+                      # Deploy no ACI
+                      az container create \
+                        --resource-group $(resourceGroup) \
+                        --name $(aciName) \
+                        --image $(acrName).azurecr.io/$(imageName):$(tag) \
+                        --os-type Linux \
+                        --registry-login-server $(acrName).azurecr.io \
+                        --registry-username $ACR_USERNAME \
+                        --registry-password $ACR_PASSWORD \
+                        --dns-name-label $(aciName) \
+                        --ports 8080 \
+                        --cpu 1 \
+                        --memory 2 \
+                        --environment-variables \
+                          DB_HOST=$(MYSQL_HOST) \
+                          DB_PORT=3306 \
+                          DB_NAME=$(mysqlDatabase) \
+                          DB_USER=$(mysqlUser) \
+                          DB_PASSWORD=$(mysqlPassword) \
+                          ConnectionStrings__DefaultConnection=Server=$(MYSQL_HOST);Port=3306;Database=$(mysqlDatabase);Uid=$(mysqlUser);Pwd=$(mysqlPassword) \
+                          ASPNETCORE_ENVIRONMENT=Production \
+                          ASPNETCORE_URLS=http://+:8080 \
+                        --restart-policy Always \
+                        --location $(location)
+
+                      echo " Deploy concluído!"
+                      echo " URL: http://$(aciName).$(location).azurecontainer.io:8080"
+
+                - task: AzureCLI@2
+                  displayName: 'Verificar Status do Deploy'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo " Verificando status do container..."
+                      az container show \
+                        --resource-group $(resourceGroup) \
+                        --name $(aciName) \
+                        --query "{Status:instanceView.state, FQDN:ipAddress.fqdn, IP:ipAddress.ip}" \
+                        -o table
+
+                      echo ""
+                      echo " Logs do container (últimas 50 linhas):"
+                      az container logs \
+                        --resource-group $(resourceGroup) \
+                        --name $(aciName) | tail -n 50

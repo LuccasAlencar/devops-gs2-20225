@@ -136,7 +136,6 @@ stages:
   jobs:
   - deployment: DeployToAzure
     displayName: 'Deploy to Azure Container Instance'
-    environment: 'production'
     strategy:
       runOnce:
         deploy:

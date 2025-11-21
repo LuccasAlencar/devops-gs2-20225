@@ -15,8 +15,6 @@ pr:
   branches:
     include:
     - main
-  required reviewers:
-  - 556152
 
 variables:
   # Configurações do projeto
@@ -155,29 +153,30 @@ stages:
                 CONTAINER_NAME="$(containerName)"
                 IMAGE_NAME="$(containerRegistry)/$(imageName):$(Build.BuildId)"
                 
-                # Verificar se o container já existe
+                # Verificar se o container já existe e deletar antes de criar
                 if az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --output none 2>/dev/null; then
-                  echo "Container exists, updating..."
-                  az container update \
+                  echo "Container exists, deleting and recreating..."
+                  az container delete \
                     --resource-group $RESOURCE_GROUP \
                     --name $CONTAINER_NAME \
-                    --image $IMAGE_NAME \
-                    --restart-policy Always
+                    --yes
                 else
                   echo "Creating new container..."
-                  az container create \
-                    --resource-group $RESOURCE_GROUP \
-                    --name $CONTAINER_NAME \
-                    --image $IMAGE_NAME \
-                    --cpu 1 \
-                    --memory 2 \
-                    --ports 8080 \
-                    --dns-name-label $CONTAINER_NAME \
-                    --restart-policy Always \
-                    --environment-variables \
-                      ASPNETCORE_ENVIRONMENT=Production \
-                      ASPNETCORE_URLS=http://+:8080
                 fi
+                
+                # Criar container com nova imagem
+                az container create \
+                  --resource-group $RESOURCE_GROUP \
+                  --name $CONTAINER_NAME \
+                  --image $IMAGE_NAME \
+                  --cpu 1 \
+                  --memory 2 \
+                  --ports 8080 \
+                  --dns-name-label $CONTAINER_NAME \
+                  --restart-policy Always \
+                  --environment-variables \
+                    ASPNETCORE_ENVIRONMENT=Production \
+                    ASPNETCORE_URLS=http://+:8080
                 
                 # Obter URL do container
                 echo "Container deployed successfully!"
@@ -201,20 +200,24 @@ stages:
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          # Configurações do MySQL Flexible Server
+          # Configurações do MySQL Container Instance
           RESOURCE_GROUP="$(resourceGroupName)"
-          MYSQL_SERVER="mysql-devops-gs2-2025"
+          MYSQL_CONTAINER="aci-mysql-server"
           MYSQL_DATABASE="devops_gs2_2025"
           MYSQL_USER="devopsadmin"
-          MYSQL_PASSWORD="$(MYSQL_PASSWORD)"
+          MYSQL_PASSWORD="DevOps@2025!GS2"
           
-          # Executar script do banco de dados
-          az mysql flexible-server execute \
+          # Esperar MySQL estar pronto
+          echo "Waiting for MySQL to be ready..."
+          sleep 30
+          
+          # Converter script SQL para base64 e executar
+          SCRIPT_B64=$(base64 -w 0 < "$(Build.SourcesDirectory)/scripts/script-bd.sql")
+          
+          # Executar script no container MySQL
+          az container exec \
             --resource-group $RESOURCE_GROUP \
-            --server-name $MYSQL_SERVER \
-            --database-name $MYSQL_DATABASE \
-            --admin-user $MYSQL_USER \
-            --admin-password $MYSQL_PASSWORD \
-            --sql-file-path "$(Build.SourcesDirectory)/scripts/script-bd.sql"
+            --name $MYSQL_CONTAINER \
+            --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -pDevOps@2025!GS2'"
           
           echo "Database setup completed successfully!"

@@ -18,7 +18,7 @@
 
 ## 📋 Descrição do Projeto
 
-Sistema backend em **.NET 8** que gerencia currículos de candidatos, integrando-se com uma **API Python de IA** para análise inteligente de ocupações e extração de skills. **Deploy automático na Azure** com MySQL Container Instance.
+Sistema backend em **.NET 8** que gerencia currículos de candidatos, integrando-se com uma **API Python de IA** para análise inteligente de ocupações e extração de skills.
 
 ### Funcionalidades Principais
 
@@ -27,10 +27,8 @@ Sistema backend em **.NET 8** que gerencia currículos de candidatos, integrando
 - 💼 **Extração de Ocupação**: Identifica a profissão do candidato
 - 🎯 **Extração de Skills**: Detecta habilidades técnicas
 - 📊 **Matching de Vagas**: Calcula compatibilidade candidato-vaga
-- 👤 **Gestão de Usuários**: CRUD completo com **MySQL**
+- 👤 **Gestão de Usuários**: CRUD completo com banco Oracle
 - 🔍 **Busca de Vagas**: Integração com API Adzuna
-- ☁️ **Deploy Azure**: Containerização e deploy automatizado
-- 🐳 **Docker**: Imagens otimizadas para produção
 
 ---
 
@@ -38,44 +36,29 @@ Sistema backend em **.NET 8** que gerencia currículos de candidatos, integrando
 
 ```mermaid
 graph TB
-    subgraph "Azure Cloud"
-        ACI["Azure Container Instance<br/>.NET App<br/>Porta 8080"]
-        MYSQL["Azure Container Instance<br/>MySQL 8.0<br/>Porta 3306"]
-        ACR["Azure Container Registry<br/>Docker Images"]
-        RG["Resource Group<br/>rg-devops-gs2-2025"]
-    end
+    A["Frontend<br/>HTML/CSS/JS<br/>LiveServer"] -->|HTTP| B["ASP.NET Core 8<br/>API REST<br/>porta 5000"]
     
-    subgraph "Desenvolvimento"
-        DEV["Developer<br/>VS Code + Git"]
-        DOCKER["Docker Desktop"]
-        PYTHON["Python API<br/>Flask<br/>Porta 5001"]
-    end
+    B --> C["PdfTextExtractor<br/>Extrai texto"]
+    C --> D["PDF Upload"]
     
-    subgraph "Frontend"
-        WEB["Frontend<br/>HTML/CSS/JS<br/>LiveServer"]
-    end
+    B --> E["ResumeService<br/>Orquestrador"]
+    E --> F["Python API<br/>Flask<br/>porta 5001"]
     
-    subgraph "APIs Externas"
-        ADZUNA["Adzuna API<br/>Busca de Vagas"]
-        HUGGING["Hugging Face<br/>Modelos de IA"]
-    end
+    F --> G["SkillExtractionService<br/>BERT + Regex"]
+    F --> H["OccupationInferenceService<br/>CBO Dataset"]
     
-    WEB -->|HTTP| ACI
-    ACI -->|MySQL| MYSQL
-    ACI -->|HTTP| PYTHON
-    PYTHON -->|BERT| HUGGING
-    ACI -->|HTTP| ADZUNA
+    B --> I["UserService<br/>Gestão de Users"]
+    B --> J["JobService<br/>Busca Adzuna"]
     
-    DEV -->|Push| ACR
-    ACR -->|Deploy| ACI
-    DOCKER -->|Build| ACR
+    I --> K["Oracle Database<br/>on-premises<br/>oracle.fiap.com.br"]
     
-    style ACI fill:#0078D4,color:#fff
-    style MYSQL fill:#D83B01,color:#fff
-    style ACR fill:#40E0D0,color:#000
-    style RG fill:#F3F2F1,color:#000
-    style WEB fill:#4CAF50,color:#fff
-    style PYTHON fill:#3776AB,color:#fff
+    B -->|JSON| A
+    F -->|JSON| B
+    
+    style B fill:#512BD4,color:#fff
+    style A fill:#4CAF50,color:#fff
+    style F fill:#4CAF50,color:#fff
+    style K fill:#FF6F00,color:#fff
 ```
 
 ---
@@ -88,9 +71,7 @@ Instale:
 - **.NET 8 SDK** ou superior
 - **Visual Studio 2022** ou **Visual Studio Code**
 - **Git**
-- **Docker Desktop** (para build local)
-- **Azure CLI** (para deploy na Azure)
-- Conta Azure com permissões para criar recursos
+- Acesso ao **Oracle Database** (oracle.fiap.com.br)
 
 ### 2️⃣ **Clonar Repositório**
 
@@ -117,35 +98,11 @@ ADZUNA_APP_KEY=
 HUGGINGFACE__TOKEN=
 
 # ============================================
-# MYSQL DATABASE (Azure Container Instance)
+# ORACLE DATABASE (On-Premises)
 # ============================================
-DB_HOST=
-DB_PORT=
-DB_NAME=
-DB_USER=
-DB_PASSWORD=
-
-# Connection String (formato completo para MySQL)
-ConnectionStrings__DefaultConnection=Server=;Port=;Database=;Uid=;Pwd=;
-
-# ============================================
-# ASP.NET Core Configuration
-# ============================================
-ASPNETCORE_ENVIRONMENT=
-ASPNETCORE_URLS=
-
-# ============================================
-# Logging
-# ============================================
-Logging__LogLevel__Default=
-Logging__LogLevel__Microsoft=
-Logging__LogLevel__Microsoft.Hosting.Lifetime=
-
-# ============================================
-# OpenTelemetry (opcional)
-# ============================================
-OTEL_SERVICE_NAME=
-OTEL_EXPORTER_ZIPKIN_ENDPOINT=
+ORACLE_USER_ID=
+ORACLE_PASSWORD=
+ORACLE_DATA_SOURCE=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=oracle.fiap.com.br)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=orcl)))
 ```
 
 ### 4️⃣ **Restaurar Dependências e Compilar**
@@ -168,79 +125,6 @@ info: Microsoft.Hosting.Lifetime[14]
 ```
 
 A API estará disponível em **http://localhost:5000**
-
----
-
-## 🚀 Deploy na Azure
-
-### 6️⃣ **Deploy Automatizado**
-
-O deploy para Azure é totalmente automatizado através do script `deploy.sh`:
-
-```bash
-# Tornar o script executável (Linux/Mac) ou use bash no Windows
-chmod +x scripts/deploy.sh
-
-# Executar deploy completo
-./scripts/deploy.sh
-```
-
-**O que o script faz:**
-1. ✅ **Cria Resource Group**: `rg-devops-gs2-2025`
-2. ✅ **Cria Azure Container Registry**: `acrdevopsgs22025`
-3. ✅ **Build Docker Image**: Imagem otimizada para produção
-4. ✅ **Push para ACR**: Imagem enviada para registry
-5. ✅ **Deploy MySQL Container**: ACI com MySQL 8.0
-6. ✅ **Configura Banco**: Cria tabelas e dados de exemplo
-7. ✅ **Deploy App Container**: ACI com .NET App
-8. ✅ **Configura Environment Variables**: Connection strings e ports
-
----
-
-### 7️⃣ **Estrutura de Deploy**
-
-```
-Azure Resources Criados:
-├── Resource Group: rg-devops-gs2-2025
-├── Container Registry: acrdevopsgs22025.azurecr.io
-├── MySQL Container: aci-mysql-server (Porta 3306)
-├── App Container: aci-devops-gs2-2025 (Porta 8080)
-└── Storage Account: sacdevopsgs22025 (logs e artefatos)
-```
-
-**URLs após deploy:**
-- **Aplicação**: http://aci-devops-gs2-2025.canadacentral.azurecontainer.io:8080
-- **Health Check**: http://aci-devops-gs2-2025.canadacentral.azurecontainer.io:8080/health
-- **Swagger**: http://aci-devops-gs2-2025.canadacentral.azurecontainer.io:8080/swagger
-
----
-
-### 8️⃣ **Dockerfile**
-
-O projeto usa um Dockerfile otimizado em `dockerfiles/Dockerfile`:
-
-```dockerfile
-# Multi-stage build para imagem pequena
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
-
-# Security: usuário não-root
-RUN adduser --disabled-password --gecos '' appuser
-USER appuser
-
-# Production ready
-ENV ASPNETCORE_URLS=http://+:8080
-ENV ASPNETCORE_ENVIRONMENT=Production
-```
-
----
-
-### 9️⃣ **Scripts de Deploy**
-
-- **`scripts/deploy.sh`**: Deploy completo para Azure
-- **`scripts/cleanup.sh`**: Limpeza de recursos Azure
-- **`scripts/script-bd.sql`**: Schema do banco MySQL
 
 ---
 
@@ -579,18 +463,12 @@ var response = await _httpClient.PostAsync(
 | **.NET** | 8.0 | Framework principal |
 | **ASP.NET Core** | 8.0 | Web API |
 | **Entity Framework Core** | 8.0 | ORM |
-| **MySQL.EntityFrameworkCore** | 8.0 | Driver MySQL |
+| **Oracle.EntityFrameworkCore** | 8.23 | Driver Oracle |
 | **Serilog** | Latest | Logging |
 | **DotNetEnv** | Latest | Carregamento .env |
 | **OpenTelemetry** | Latest | Tracing |
 | **HealthChecks** | Latest | Health Check |
 | **HttpClient** | Built-in | Chamadas HTTP |
-| **Docker** | Latest | Containerização |
-| **Azure Container Instance** | - | Hospedagem |
-| **Azure Container Registry** | - | Registry |
-| **Azure CLI** | Latest | Deploy automação |
-| **MySQL** | 8.0 | Banco de dados |
-| **Bash** | - | Scripts de deploy |
 
 ---
 
@@ -626,12 +504,6 @@ dotnet-gs2-2025/
 │   └── Migrations/
 ├── Configuration/
 │   └── HuggingFaceOptions.cs
-├── dockerfiles/
-│   └── Dockerfile                    🐳 Imagem Docker
-├── scripts/
-│   ├── deploy.sh                     🚀 Deploy Azure
-│   ├── cleanup.sh                    🧹 Limpeza recursos
-│   └── script-bd.sql                 📋 Schema MySQL
 ├── frontend/
 │   ├── index.html                   🌐 Interface
 │   ├── script.js                    📱 Lógica
@@ -695,17 +567,18 @@ dotnet-gs2-2025/
   },
   "AllowedHosts": "*"
 }
+
 ```
 
 ---
 
 ## 🔐 Variáveis de Ambiente (.env)
 
-As credenciais são carregadas do arquivo `.env` na raiz do projeto.
+As credenciais são carregadas do arquivo `.env` na raiz do projeto:
+
+
 
 ---
-
-## 🌐 Acessando a Aplicação
 
 ### 1. Acessar Swagger
 
@@ -713,50 +586,29 @@ Abra no navegador: **http://localhost:5000**
 
 Swagger UI mostrará todos os endpoints documentados
 
-### 2. Acessar o frontend via LiveServer
+
+### 1. Acessar o frontend via LiveServer
 
 Abra no navegador: **http://127.0.0.1:5500/dotnet-gs2-2025/frontend/**
 
-No site é só fazer o upload do currículo em PDF
+No site é só fazer o upload do curriculo em pdf
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Erro: "Unable to connect to MySQL Database"
+### Erro: "Unable to connect to Oracle Database"
 ```
 ✅ Solução: 
-   1. Verifique se o container MySQL está rodando: az container show
-   2. Teste conexão: telnet aci-mysql-devops-gs2-2025.canadacentral.azurecontainer.io 3306
-   3. Verifique credenciais no .env (devopsadmin/DevOps@2025!GS2)
-```
-
-### Erro: "Table 'devops_gs2_2025.users' doesn't exist"
-```
-✅ Solução: 
-   1. Execute o deploy.sh novamente para recriar o banco
-   2. Verifique se script-bd.sql foi executado corretamente
-   3. Conecte no MySQL e verifique as tabelas
+   1. Verifique as credenciais no .env
+   2. Teste conexão: ping oracle.fiap.com.br
+   3. Verifique porta 1521 aberta
 ```
 
 ### Erro: "Unable to connect to Python API"
 ```
 ✅ Solução: Verifique se Python está rodando em localhost:5001
    python run.py
-```
-
-### Erro: "Docker build failed"
-```
-✅ Solução: 
-   1. Verifique se Docker Desktop está rodando
-   2. Limpe cache: docker system prune -f
-   3. Verifique Dockerfile em dockerfiles/
-```
-
-### Erro: "az container exec: InvalidCommandLength"
-```
-✅ Solução: Script já foi corrigido para dividir comandos SQL
-   Execute deploy.sh novamente
 ```
 
 ### Erro: "CORS error"
@@ -777,14 +629,6 @@ No site é só fazer o upload do currículo em PDF
    "applicationUrl": "http://localhost:5002"
 ```
 
-### Deploy Azure falhou
-```
-✅ Solução:
-   1. Verifique login: az account show
-   2. Verifique permissões na subscription
-   3. Execute cleanup.sh e depois deploy.sh
-```
-
 ---
 
 ## 📊 Performance
@@ -801,10 +645,8 @@ No site é só fazer o upload do currículo em PDF
 
 ## ✅ Checklist de Deployment
 
-### Ambiente Local
 - [ ] .NET 8 SDK instalado
-- [ ] Docker Desktop instalado e rodando
-- [ ] Azure CLI instalado e configurado
+- [ ] Acesso ao Oracle Database configurado
 - [ ] `.env` criado com credenciais corretas
 - [ ] `dotnet restore` executado com sucesso
 - [ ] `dotnet build` compilado com sucesso (0 errors)
@@ -814,18 +656,6 @@ No site é só fazer o upload do currículo em PDF
 - [ ] Frontend acessível via LiveServer
 - [ ] Health check respondendo 200 OK em http://localhost:5000/health
 - [ ] Swagger acessível em http://localhost:5000
-
-### Deploy Azure
-- [ ] Login Azure: `az login` realizado
-- [ ] Subscription correta selecionada
-- [ ] Permissões para criar Resource Group
-- [ ] Permissões para criar Container Registry
-- [ ] Permissões para criar Container Instance
-- [ ] Script `deploy.sh` executado com sucesso
-- [ ] MySQL Container criado e configurado
-- [ ] App Container criado e rodando
-- [ ] Health check Azure respondendo: http://aci-devops-gs2-2025.canadacentral.azurecontainer.io:8080/health
-- [ ] Swagger Azure acessível: http://aci-devops-gs2-2025.canadacentral.azurecontainer.io:8080/swagger
 
 ---
 
@@ -840,3 +670,4 @@ Precisa de ajuda?
 5. Veja os logs de erro no console
 
 ---
+

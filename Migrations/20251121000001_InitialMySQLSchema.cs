@@ -1,6 +1,5 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 #nullable disable
 
@@ -20,7 +19,7 @@ namespace dotnet_gs2_2025.Migrations
                 columns: table => new
                 {
                     id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
+                        .Annotation("MySql:ValueGenerationStrategy", "IdentityColumn"),
                     name = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     email = table.Column<string>(type: "varchar(150)", maxLength: 150, nullable: false)

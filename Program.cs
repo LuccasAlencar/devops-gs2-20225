@@ -184,6 +184,36 @@ try
             Log.Information("Aplicando migrations do banco de dados...");
             dbContext.Database.Migrate();
             Log.Information("✅ Migrations aplicadas com sucesso");
+            
+            // Verificar se a tabela users existe, se não criar
+            try
+            {
+                var userCount = dbContext.Users.CountAsync().Result;
+                Log.Information("✅ Tabela users verificada - {Count} usuários existentes", userCount);
+            }
+            catch (Exception tableEx)
+            {
+                Log.Warning("⚠️  Erro ao verificar tabela users: {Message}", tableEx.Message);
+                
+                // Tentar criar tabela com SQL bruto se migration falhou
+                Log.Information("Tentando criar tabela users com SQL direto...");
+                var createTableSql = @"
+                    CREATE TABLE IF NOT EXISTS users (
+                        id INT PRIMARY KEY AUTO_INCREMENT,
+                        name VARCHAR(100) NOT NULL,
+                        email VARCHAR(150) NOT NULL UNIQUE,
+                        password VARCHAR(255) NOT NULL,
+                        phone VARCHAR(20),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_email (email),
+                        INDEX idx_created_at (created_at)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                ";
+                
+                dbContext.Database.ExecuteSqlRaw(createTableSql);
+                Log.Information("✅ Tabela users criada com sucesso");
+            }
         }
     }
     catch (Exception ex)

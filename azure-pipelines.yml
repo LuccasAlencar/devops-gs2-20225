@@ -166,6 +166,42 @@ stages:
           vmImage: 'ubuntu-latest'
         steps:
           - task: AzureCLI@2
+            displayName: 'Criar Resource Group e ACR'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo " Criando infraestrutura básica..."
+                
+                # Criar Resource Group se não existir
+                if az group show \
+                    --name $(resourceGroup) &>/dev/null; then
+                  echo " Resource Group já existe"
+                else
+                  echo " Criando Resource Group..."
+                  az group create \
+                    --name $(resourceGroup) \
+                    --location $(location)
+                  echo " Resource Group criado"
+                fi
+                
+                # Criar ACR se não existir
+                if az acr show \
+                    --resource-group $(resourceGroup) \
+                    --name $(acrName) &>/dev/null; then
+                  echo " Azure Container Registry já existe"
+                else
+                  echo " Criando Azure Container Registry..."
+                  az acr create \
+                    --resource-group $(resourceGroup) \
+                    --name $(acrName) \
+                    --sku Basic \
+                    --location $(location)
+                  echo " Azure Container Registry criado"
+                fi
+
+          - task: AzureCLI@2
             displayName: 'Verificar/Criar MySQL Container Instance'
             inputs:
               azureSubscription: '$(azureSubscription)'

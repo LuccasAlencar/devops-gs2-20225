@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador de Vagas</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 Buscador de Vagas</h1>
+            <p>Encontre vagas compatíveis com seu perfil</p>
+        </header>
+
+        <!-- Upload de Currículo -->
+        <section class="upload-section">
+            <h2>📄 Upload de Currículo</h2>
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="curriculoInput" accept=".pdf" hidden>
+                <label for="curriculoInput" class="upload-label">
+                    <span class="upload-icon">📎</span>
+                    <span id="fileName">Clique para selecionar seu currículo</span>
+                </label>
+            </div>
+            <div id="curriculoInfo" class="curriculo-info hidden">
+                <p><strong>Palavras-chave extraídas:</strong></p>
+                <div id="keywords" class="keywords"></div>
+                <p id="locationsTitle" class="hidden"><strong>Localizações sugeridas:</strong></p>
+                <div id="locations" class="keywords"></div>
+            </div>
+        </section>
+
+        <!-- Barra de Busca -->
+        <section class="search-section">
+            <h2>🔎 Buscar Vagas</h2>
+            <form id="searchForm">
+                <div class="form-group">
+                    <label for="cargo">Cargo ou palavra-chave:</label>
+                    <input type="text" id="cargo" placeholder="Ex: desenvolvedor, java, mobile" required>
+                </div>
+                <div class="form-group">
+                    <label for="localizacao">Localização:</label>
+                    <input type="text" id="localizacao" placeholder="Ex: são paulo, brasil" value="brasil">
+                </div>
+                <button type="submit" class="btn-search">Buscar Vagas</button>
+            </form>
+        </section>
+
+        <!-- Loading -->
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Buscando vagas...</p>
+        </div>
+
+        <!-- Resultados -->
+        <section class="results-section hidden" id="resultsSection">
+            <h2>📋 Vagas Encontradas</h2>
+            <div id="resultsCount" class="results-count"></div>
+            <div id="jobsList" class="jobs-list"></div>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

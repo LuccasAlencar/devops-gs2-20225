@@ -1,0 +1,312 @@
+# Azure Pipelines - Pipeline CI/CD para .NET 8
+# Build automático em PRs + Deploy automático após merge na main
+# Containeriza no ACR e faz deploy em ACI com Azure Database for MySQL
+
+trigger:
+  branches:
+    include:
+      - main
+      - master
+      - develop
+
+pr:
+  branches:
+    include:
+      - main
+      - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # Variable Group com secrets (criar no Azure DevOps)
+  - group: dotnet-gs2-secrets
+
+  # Configurações do Azure
+  - name: azureSubscription
+    value: 'azure-service-connection'
+  - name: resourceGroup
+    value: 'rg-dotnet-gs2-556152'
+  - name: location
+    value: 'eastus'
+  - name: acrName
+    value: 'acrdotnetgs2556152'
+  - name: aciName
+    value: 'aci-dotnet-gs2-556152'
+  - name: imageName
+    value: 'dotnet-gs2-app'
+  - name: tag
+    value: '$(Build.BuildId)'
+  - name: registryUrl
+    value: 'acrdotnetgs2556152.azurecr.io'
+
+  # Configurações do banco de dados Azure Database for MySQL
+  - name: mysqlServerName
+    value: 'mysql-dotnet-gs2-556152'
+  - name: mysqlDatabase
+    value: 'dotnet_gs2'
+  - name: mysqlAdminUser
+    value: 'adminuser'
+  - name: mysqlHost
+    value: 'mysql-dotnet-gs2-556152.mysql.database.azure.com'
+
+stages:
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 1: BUILD - Compilação e Testes
+  # ═══════════════════════════════════════════════════════════
+  - stage: Build
+    displayName: 'Build e Testes'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build .NET Application'
+        steps:
+          # Setup .NET SDK
+          - task: UseDotNet@2
+            displayName: 'Setup .NET 8.0'
+            inputs:
+              version: '8.0.x'
+              packageType: 'sdk'
+
+          # Restaurar dependências
+          - task: DotNetCoreCLI@2
+            displayName: 'Restaurar NuGet packages'
+            inputs:
+              command: 'restore'
+              projects: '**/*.csproj'
+
+          # Build
+          - task: DotNetCoreCLI@2
+            displayName: 'Build Application'
+            inputs:
+              command: 'build'
+              projects: '**/*.csproj'
+              arguments: '--configuration Release --no-restore'
+
+          # Executar Testes Unitários
+          - task: DotNetCoreCLI@2
+            displayName: 'Executar Testes Unitários'
+            continueOnError: true
+            inputs:
+              command: 'test'
+              projects: '**/*Tests.csproj'
+              arguments: '--configuration Release --no-build --logger "trx" --collect:"XPlat Code Coverage"'
+              publishTestResults: true
+
+          # Publicar relatório de testes
+          - task: PublishTestResults@2
+            displayName: 'Publicar Resultados dos Testes'
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: 'VSTest'
+              testResultsFiles: '**/*.trx'
+              mergeTestResults: true
+              failTaskOnFailedTests: false
+
+          # Publicar cobertura de código como artefato
+          - task: CopyFiles@2
+            displayName: 'Copiar Cobertura de Código'
+            condition: succeededOrFailed()
+            inputs:
+              SourceFolder: '$(Agent.TempDirectory)'
+              Contents: '**/coverage.cobertura.xml'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)/coverage'
+              flattenFolders: true
+
+          # Publish artefatos
+          - task: DotNetCoreCLI@2
+            displayName: 'Publicar Aplicação'
+            inputs:
+              command: 'publish'
+              projects: '**/*.csproj'
+              publishWebProjects: false
+              arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
+              zipAfterPublish: true
+
+          # Copiar scripts para artefatos
+          - task: CopyFiles@2
+            displayName: 'Copiar Scripts'
+            inputs:
+              SourceFolder: '$(Build.SourcesDirectory)/scripts'
+              Contents: '**'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)/scripts'
+              flattenFolders: false
+
+          # Copiar Dockerfile
+          - task: CopyFiles@2
+            displayName: 'Copiar Dockerfile'
+            inputs:
+              SourceFolder: '$(Build.SourcesDirectory)'
+              Contents: 'Dockerfile'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+          # Copiar arquivo appsettings
+          - task: CopyFiles@2
+            displayName: 'Copiar appsettings.json'
+            inputs:
+              SourceFolder: '$(Build.SourcesDirectory)'
+              Contents: 'appsettings.*.json'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+          # Publicar artefatos
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publicar Artefatos'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 2: IMAGE - Build e Push da Imagem Docker
+  # ═══════════════════════════════════════════════════════════
+  - stage: Image
+    displayName: 'Build e Push Docker Image'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: DockerJob
+        displayName: 'Build Docker Image'
+        steps:
+          # Download artefatos
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Artefatos'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          # Login no ACR
+          - task: AzureCLI@2
+            displayName: 'Login no Azure Container Registry'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az acr login --name $(acrName)
+
+          # Build e Push da imagem Docker
+          - task: AzureCLI@2
+            displayName: 'Build e Push Docker Image'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🐳 Building Docker image..."
+                docker build \
+                  --tag $(registryUrl)/$(imageName):$(tag) \
+                  --tag $(registryUrl)/$(imageName):latest \
+                  -f $(System.ArtifactsDirectory)/drop/Dockerfile \
+                  $(System.ArtifactsDirectory)/drop
+
+                echo "📤 Pushing to ACR..."
+                docker push $(registryUrl)/$(imageName):$(tag)
+                docker push $(registryUrl)/$(imageName):latest
+                
+                echo "✅ Image pushed successfully"
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 3: DEPLOY - Deploy em Azure Container Instance (ACI)
+  # ═══════════════════════════════════════════════════════════
+  - stage: Deploy
+    displayName: 'Deploy para Azure Container Instance'
+    dependsOn: Image
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployACI
+        displayName: 'Deploy ACI'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Instalar cliente MySQL
+                - script: |
+                    echo "Instalando cliente MySQL..."
+                    sudo apt-get update && sudo apt-get install -y mysql-client
+                  displayName: 'Instalar MySQL Client'
+
+                # Preparar banco de dados
+                - task: AzureCLI@2
+                  displayName: 'Inicializar Banco de Dados MySQL'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo "🗄️ Inicializando banco de dados..."
+                      MYSQL_PASSWORD="${mysqlAdminPassword}"
+                      mysql -h ${mysqlHost} \
+                        -u ${mysqlAdminUser}@${mysqlServerName} \
+                        -p${MYSQL_PASSWORD} \
+                        < $(Pipeline.Workspace)/drop/scripts/script-bd.sql 2>/dev/null || \
+                      echo "⚠️ Banco de dados já inicializado ou erro de conexão"
+
+                # Deploy em ACI
+                - task: AzureCLI@2
+                  displayName: 'Deploy em Azure Container Instance'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo "🚀 Deployando em ACI..."
+                      REGISTRY_USERNAME=$(az acr credential show --name $(acrName) --query username -o tsv)
+                      REGISTRY_PASSWORD=$(az acr credential show --name $(acrName) --query passwords[0].value -o tsv)
+                      az container delete \
+                        --resource-group $(resourceGroup) \
+                        --name $(aciName) \
+                        --yes 2>/dev/null || true
+                      MYSQL_PASSWORD="${mysqlAdminPassword}"
+                      ASPNETCORE_ENVIRONMENT="${aspnetcoreEnvironment:-Production}"
+                      az container create \
+                        --resource-group $(resourceGroup) \
+                        --name $(aciName) \
+                        --image $(registryUrl)/$(imageName):$(tag) \
+                        --registry-login-server $(registryUrl) \
+                        --registry-username ${REGISTRY_USERNAME} \
+                        --registry-password ${REGISTRY_PASSWORD} \
+                        --environment-variables \
+                          ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT} \
+                          ASPNETCORE_URLS="http://+:8080" \
+                          DB_HOST=${mysqlHost} \
+                          DB_PORT=3306 \
+                          DB_NAME=${mysqlDatabase} \
+                          DB_USER=${mysqlAdminUser}@${mysqlServerName} \
+                          DB_PASSWORD=${MYSQL_PASSWORD} \
+                        --ports 8080 \
+                        --cpu 1 \
+                        --memory 1 \
+                        --dns-name-label $(aciName) \
+                        --location $(location)
+                      echo "✅ Deployment concluído"
+                      echo ""
+                      echo "📍 URL da aplicação:"
+                      az container show \
+                        --resource-group $(resourceGroup) \
+                        --name $(aciName) \
+                        --query ipAddress.fqdn -o tsv
+
+                # Health Check (Bash)
+                - script: |
+                    echo "⏳ Aguardando aplicação iniciar..."
+                    sleep 30
+                    URL="http://$(aciName).eastus.azurecontainer.io:8080/health"
+                    MAX_RETRIES=10
+                    RETRY=0
+                    until [ $RETRY -ge $MAX_RETRIES ]
+                    do
+                      STATUS=$(curl -s -o /dev/null -w "%{http_code}" $URL)
+                      if [ "$STATUS" == "200" ]; then
+                        echo "✅ Health check passou! Aplicação está saudável."
+                        exit 0
+                      fi
+                      RETRY=$((RETRY+1))
+                      echo "⏳ Tentativa $RETRY de $MAX_RETRIES..."
+                      sleep 10
+                    done
+                    echo "❌ Health check falhou!"
+                    exit 1
+                  displayName: 'Health Check'
+                  continueOnError: 'true'

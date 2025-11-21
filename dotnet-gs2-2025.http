@@ -1,0 +1,81 @@
+@baseUrl = http://localhost:5000
+
+### Health Check
+GET {{baseUrl}}/health
+Accept: application/json
+
+###
+
+### API V1 - Listar Usuários (Página 1)
+GET {{baseUrl}}/api/v1/users?page=1&pageSize=10
+Accept: application/json
+
+###
+
+### API V1 - Obter Usuário por ID
+GET {{baseUrl}}/api/v1/users/1
+Accept: application/json
+
+###
+
+### API V1 - Criar Novo Usuário
+POST {{baseUrl}}/api/v1/users
+Content-Type: application/json
+
+{
+  "name": "João Silva",
+  "email": "joao.silva@email.com",
+  "password": "senha123456",
+  "phone": "(11) 98765-4321"
+}
+
+###
+
+### API V1 - Atualizar Usuário
+PUT {{baseUrl}}/api/v1/users/1
+Content-Type: application/json
+
+{
+  "name": "João Silva Atualizado",
+  "phone": "(11) 99999-9999"
+}
+
+###
+
+### API V1 - Deletar Usuário
+DELETE {{baseUrl}}/api/v1/users/1
+
+###
+
+### API V2 - Listar Usuários (Página 1) - Versão Melhorada
+GET {{baseUrl}}/api/v2/users?page=1&pageSize=20
+Accept: application/json
+
+###
+
+### API V2 - Criar Usuário com Header de Versão
+POST {{baseUrl}}/api/v2/users
+Content-Type: application/json
+X-API-Version: 2.0
+
+{
+  "name": "Maria Santos",
+  "email": "maria.santos@email.com",
+  "password": "senha123456",
+  "phone": "(21) 98765-4321"
+}
+
+###
+
+### Versionamento via Query String
+GET {{baseUrl}}/api/users?api-version=1.0&page=1&pageSize=10
+Accept: application/json
+
+###
+
+### Versionamento via Header
+GET {{baseUrl}}/api/users?page=1&pageSize=10
+Accept: application/json
+X-API-Version: 2.0
+
+###

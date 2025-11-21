@@ -10,11 +10,20 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using DotNetEnv;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
-// Carregar variáveis de ambiente do arquivo .env
-Env.Load();
+// Carregar variáveis de ambiente do arquivo .env (se existir localmente)
+try
+{
+    using (var env = new System.IO.FileStream(".env", System.IO.FileMode.Open, System.IO.FileAccess.Read))
+    {
+        DotNetEnv.Env.Load();
+    }
+}
+catch
+{
+    // .env não existe em produção, variáveis virão do ambiente
+}
 
 // Configuração do Serilog
 Log.Logger = new LoggerConfiguration()
@@ -44,6 +53,13 @@ try
     var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "dotnet_gs2";
     var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "root";
     var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "password";
+    
+    Log.Information("Variáveis de conexão MySQL carregadas:");
+    Log.Information("  Host: {Host}", mysqlHost);
+    Log.Information("  Port: {Port}", mysqlPort);
+    Log.Information("  Database: {Database}", mysqlDatabase);
+    Log.Information("  User: {User}", mysqlUser);
+    Log.Information("  Password: {'*' * mysqlPassword.Length}");
     
     // Usar SslMode=Required apenas para Azure, usar None para localhost
     var sslMode = mysqlHost.Contains("azure") ? "Required" : "None";
@@ -172,11 +188,37 @@ try
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "❌ Erro ao aplicar migrations");
+        Log.Error(ex, "❌ Erro ao aplicar migrations: {Message}", ex.Message);
+        // Não falhar a aplicação se as migrations falharem
+        // O banco pode já estar migrado
     }
 
     // Middleware para logging de requisições
     app.UseSerilogRequestLogging();
+
+    // Middleware global de tratamento de exceções
+    app.UseExceptionHandler(errorApp =>
+    {
+        errorApp.Run(async context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            context.Response.ContentType = "application/json";
+
+            var exceptionHandlerPathFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+            var exception = exceptionHandlerPathFeature?.Error;
+
+            Log.Error(exception, "Erro não tratado na aplicação");
+
+            var response = new
+            {
+                message = "Erro interno do servidor",
+                detail = exception?.Message,
+                path = exceptionHandlerPathFeature?.Path
+            };
+
+            await context.Response.WriteAsJsonAsync(response);
+        });
+    });
 
     // Configure the HTTP request pipeline
     app.UseSwagger();

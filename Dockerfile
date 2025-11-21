@@ -35,15 +35,14 @@ COPY --from=builder /app/publish .
 EXPOSE 8080
 EXPOSE 8081
 
-# Variáveis de ambiente padrão
+# Variáveis de ambiente - MYSQL (obrigatórias)
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
-ENV DB_HOST=localhost
-ENV DB_PORT=3306
-ENV DB_NAME=dotnet_gs2
-ENV DB_USER=adminuser
-ENV DB_PASSWORD=password
-ENV AZURE_MYSQL_CONNECTION_STRING=""
+ENV MYSQL_HOST=localhost
+ENV MYSQL_PORT=3306
+ENV MYSQL_DATABASE=dotnet_gs2
+ENV MYSQL_USER=root
+ENV MYSQL_PASSWORD=password
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

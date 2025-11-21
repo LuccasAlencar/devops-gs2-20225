@@ -51,7 +51,7 @@ Requisitos da Implementação
 
 8) Banco de dados em:
 • Container (ACI/ACR) ou
-• Serviço PaaS (Azure SQL, MySQL ou Postgres)
+• Serviço PaaS (Azure SQL)
 (vamos utilizar o mysql da azure)
 Não misturar Containerização e PaaS! O artefato e resultado dos testes (JUnit, Xunit, Selenium, Plan Tests etc.) devem 
 estar publicados na Pipeline de Build (exceção para projetos em ACR/ACI que é obrigatório somente a publicação dos Testes)

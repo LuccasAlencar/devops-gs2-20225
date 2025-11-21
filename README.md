@@ -516,26 +516,93 @@ Todos os endpoints retornam links HATEOAS para navegação pela API.
   - Connection strings protegidas
 
 ## 📦 Scripts e Infraestrutura
-- Scripts de provisionamento: `/scripts/script-infra.sh` e `/scripts/script-infra.cmd`
+- Scripts de provisionamento: `/scripts/deploy.sh` (unificado)
 - Script de banco de dados: `/scripts/script-bd.sql`
-- Dockerfile: `/Dockerfile`
+- Dockerfile: `/dockerfiles/Dockerfile`
 - Pipeline: `/azure-pipelines.yml`
+- Script de limpeza: `/scripts/cleanup.sh`
+
+## 🚀 Scripts de Deploy e Limpeza
+
+### Deploy Completo
+```bash
+# Tornar executável
+chmod +x scripts/deploy.sh
+
+# Deploy completo (infra + build + docker + deploy)
+./scripts/deploy.sh full
+
+# Apenas infraestrutura
+./scripts/deploy.sh infra
+
+# Apenas Docker
+./scripts/deploy.sh docker
+
+# Apenas build local
+./scripts/deploy.sh pipeline
+```
+
+### Limpeza Completa
+```bash
+# Tornar executável
+chmod +x scripts/cleanup.sh
+
+# Limpeza completa
+./scripts/cleanup.sh all
+
+# Apenas Docker local
+./scripts/cleanup.sh docker
+
+# Apenas infraestrutura Azure
+./scripts/cleanup.sh infra
+
+# Apenas recursos locais
+./scripts/cleanup.sh local
+```
 
 ## 🗺️ Arquitetura Macro (Mermaid JS)
 ```mermaid
 flowchart TD
-    subgraph Azure
+    subgraph Azure DevOps
+        Boards[Azure Boards]
+        Repos[Azure Repos]
+        Pipelines[Azure Pipelines]
+    end
+    
+    subgraph Azure Infrastructure
         ACR[Azure Container Registry]
         ACI[Azure Container Instance]
         MYSQL[Azure Database for MySQL]
         Storage[Azure Storage]
+        RG[Resource Group]
     end
-    Dev[DevOps Pipeline]
-    Dev -->|Build & Push| ACR
+    
+    subgraph Development
+        Dev[Developer]
+        Git[Git Local]
+        Docker[Docker Desktop]
+        VSCode[VS Code]
+    end
+    
+    Dev -->|Push| Git
+    Git -->|Commit| Repos
+    Repos -->|Trigger| Pipelines
+    Pipelines -->|Build| Docker
+    Docker -->|Push| ACR
     ACR -->|Deploy| ACI
     ACI -->|Conecta| MYSQL
     ACI -->|Salva artefatos| Storage
-    User[Usuário] -->|HTTP| ACI
+    Pipelines -->|Cria| RG
+    RG -->|Contém| ACR
+    RG -->|Contém| ACI
+    RG -->|Contém| MYSQL
+    RG -->|Contém| Storage
+    Boards -->|Work Items| Pipelines
+    User[Usuário Final] -->|HTTP/HTTPS| ACI
+    
+    style Pipelines fill:#f9f,stroke:#333,stroke-width:2px
+    style ACI fill:#bbf,stroke:#333,stroke-width:2px
+    style MYSQL fill:#bfb,stroke:#333,stroke-width:2px
 ```
 
 ## 📝 Exemplos de Uso

@@ -160,162 +160,160 @@ stages:
     dependsOn: Image
     condition: succeeded()
     jobs:
-      - deployment: DeployACI
+      - job: DeployACI
         displayName: 'Deploy to Container Instance'
-        environment: 'devops-gs2-2025'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: AzureCLI@2
-                  displayName: 'Verificar/Criar MySQL Container Instance'
-                  inputs:
-                    azureSubscription: '$(azureSubscription)'
-                    scriptType: 'bash'
-                    scriptLocation: 'inlineScript'
-                    inlineScript: |
-                      echo " Verificando MySQL Container Instance..."
-                      
-                      # Verificar se o container MySQL já existe
-                      if az container show \
-                          --resource-group $(resourceGroup) \
-                          --name $(mysqlContainerName) &>/dev/null; then
-                        echo " MySQL Container já existe"
-                      else
-                        echo " Criando MySQL Container Instance..."
-                        
-                        # Criar MySQL Container
-                        az container create \
-                          --resource-group $(resourceGroup) \
-                          --name $(mysqlContainerName) \
-                          --image mysql:8.0 \
-                          --dns-name-label mysql-$(resourceGroup) \
-                          --ports 3306 \
-                          --cpu 1 \
-                          --memory 2 \
-                          --environment-variables \
-                            MYSQL_ROOT_PASSWORD=$(mysqlPassword) \
-                            MYSQL_DATABASE=$(mysqlDatabase) \
-                            MYSQL_USER=$(mysqlUser) \
-                            MYSQL_PASSWORD=$(mysqlPassword) \
-                          --restart-policy Always \
-                          --location $(location)
-                        
-                        echo " MySQL Container criado"
-                        
-                        # Aguardar o MySQL ficar pronto
-                        echo " Aguardando MySQL ficar pronto..."
-                        sleep 90
-                      fi
-                      
-                      # Obter FQDN do MySQL
-                      MYSQL_HOST=$(az container show \
-                        --resource-group $(resourceGroup) \
-                        --name $(mysqlContainerName) \
-                        --query "ipAddress.fqdn" -o tsv)
-                      
-                      echo "MySQL Host: $MYSQL_HOST"
-                      echo "##vso[task.setvariable variable=MYSQL_HOST]$MYSQL_HOST"
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Verificar/Criar MySQL Container Instance'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo " Verificando MySQL Container Instance..."
+                
+                # Verificar se o container MySQL já existe
+                if az container show \
+                    --resource-group $(resourceGroup) \
+                    --name $(mysqlContainerName) &>/dev/null; then
+                  echo " MySQL Container já existe"
+                else
+                  echo " Criando MySQL Container Instance..."
+                  
+                  # Criar MySQL Container
+                  az container create \
+                    --resource-group $(resourceGroup) \
+                    --name $(mysqlContainerName) \
+                    --image mysql:8.0 \
+                    --dns-name-label mysql-$(resourceGroup) \
+                    --ports 3306 \
+                    --cpu 1 \
+                    --memory 2 \
+                    --environment-variables \
+                      MYSQL_ROOT_PASSWORD=$(mysqlPassword) \
+                      MYSQL_DATABASE=$(mysqlDatabase) \
+                      MYSQL_USER=$(mysqlUser) \
+                      MYSQL_PASSWORD=$(mysqlPassword) \
+                    --restart-policy Always \
+                    --location $(location)
+                  
+                  echo " MySQL Container criado"
+                  
+                  # Aguardar o MySQL ficar pronto
+                  echo " Aguardando MySQL ficar pronto..."
+                  sleep 90
+                fi
+                
+                # Obter FQDN do MySQL
+                MYSQL_HOST=$(az container show \
+                  --resource-group $(resourceGroup) \
+                  --name $(mysqlContainerName) \
+                  --query "ipAddress.fqdn" -o tsv)
+                
+                echo "MySQL Host: $MYSQL_HOST"
+                echo "##vso[task.setvariable variable=MYSQL_HOST]$MYSQL_HOST"
 
-                - task: AzureCLI@2
-                  displayName: 'Executar Script SQL no MySQL'
-                  inputs:
-                    azureSubscription: '$(azureSubscription)'
-                    scriptType: 'bash'
-                    scriptLocation: 'inlineScript'
-                    inlineScript: |
-                      echo " Executando script SQL..."
-                      
-                      # Esperar MySQL estar pronto
-                      echo " Aguardando MySQL iniciar..."
-                      sleep 30
-                      
-                      # Converter script SQL para base64 e executar
-                      SCRIPT_B64=$(base64 -w 0 < "$(Build.SourcesDirectory)/scripts/script-bd.sql")
-                      
-                      # Executar script no container MySQL
-                      az container exec \
-                        --resource-group $(resourceGroup) \
-                        --name $(mysqlContainerName) \
-                        --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -p$(mysqlPassword)'" && echo " Script SQL executado com sucesso" || {
-                        echo "  Tentando novamente em 30 segundos..."
-                        sleep 30
-                        az container exec \
-                          --resource-group $(resourceGroup) \
-                          --name $(mysqlContainerName) \
-                          --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -p$(mysqlPassword)'" && echo " Script SQL executado" || {
-                          echo "  Execute manualmente depois se necessário"
-                        }
-                      }
+          - task: AzureCLI@2
+            displayName: 'Executar Script SQL no MySQL'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo " Executando script SQL..."
+                
+                # Esperar MySQL estar pronto
+                echo " Aguardando MySQL iniciar..."
+                sleep 30
+                
+                # Converter script SQL para base64 e executar
+                SCRIPT_B64=$(base64 -w 0 < "$(Build.SourcesDirectory)/scripts/script-bd.sql")
+                
+                # Executar script no container MySQL
+                az container exec \
+                  --resource-group $(resourceGroup) \
+                  --name $(mysqlContainerName) \
+                  --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -p$(mysqlPassword)'" && echo " Script SQL executado com sucesso" || {
+                  echo "  Tentando novamente em 30 segundos..."
+                  sleep 30
+                  az container exec \
+                    --resource-group $(resourceGroup) \
+                    --name $(mysqlContainerName) \
+                    --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -p$(mysqlPassword)'" && echo " Script SQL executado" || {
+                    echo "  Execute manualmente depois se necessário"
+                  }
+                }
 
-                - task: AzureCLI@2
-                  displayName: 'Deploy to ACI'
-                  inputs:
-                    azureSubscription: '$(azureSubscription)'
-                    scriptType: 'bash'
-                    scriptLocation: 'inlineScript'
-                    inlineScript: |
-                      echo " Iniciando deploy no Azure Container Instance..."
-                      
-                      # Obter credenciais do ACR
-                      ACR_USERNAME=$(az acr credential show \
-                        --name $(acrName) \
-                        --query "username" -o tsv)
+          - task: AzureCLI@2
+            displayName: 'Deploy to ACI'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo " Iniciando deploy no Azure Container Instance..."
+                
+                # Obter credenciais do ACR
+                ACR_USERNAME=$(az acr credential show \
+                  --name $(acrName) \
+                  --query "username" -o tsv)
 
-                      ACR_PASSWORD=$(az acr credential show \
-                        --name $(acrName) \
-                        --query "passwords[0].value" -o tsv)
+                ACR_PASSWORD=$(az acr credential show \
+                  --name $(acrName) \
+                  --query "passwords[0].value" -o tsv)
 
-                      # Deletar container existente se houver
-                      az container delete \
-                        --resource-group $(resourceGroup) \
-                        --name $(aciName) \
-                        --yes 2>/dev/null || true
+                # Deletar container existente se houver
+                az container delete \
+                  --resource-group $(resourceGroup) \
+                  --name $(aciName) \
+                  --yes 2>/dev/null || true
 
-                      # Deploy no ACI
-                      az container create \
-                        --resource-group $(resourceGroup) \
-                        --name $(aciName) \
-                        --image $(acrName).azurecr.io/$(imageName):$(tag) \
-                        --os-type Linux \
-                        --registry-login-server $(acrName).azurecr.io \
-                        --registry-username $ACR_USERNAME \
-                        --registry-password $ACR_PASSWORD \
-                        --dns-name-label $(aciName) \
-                        --ports 8080 \
-                        --cpu 1 \
-                        --memory 2 \
-                        --environment-variables \
-                          DB_HOST=$(MYSQL_HOST) \
-                          DB_PORT=3306 \
-                          DB_NAME=$(mysqlDatabase) \
-                          DB_USER=$(mysqlUser) \
-                          DB_PASSWORD=$(mysqlPassword) \
-                          ConnectionStrings__DefaultConnection=Server=$(MYSQL_HOST);Port=3306;Database=$(mysqlDatabase);Uid=$(mysqlUser);Pwd=$(mysqlPassword) \
-                          ASPNETCORE_ENVIRONMENT=Production \
-                          ASPNETCORE_URLS=http://+:8080 \
-                        --restart-policy Always \
-                        --location $(location)
+                # Deploy no ACI
+                az container create \
+                  --resource-group $(resourceGroup) \
+                  --name $(aciName) \
+                  --image $(acrName).azurecr.io/$(imageName):$(tag) \
+                  --os-type Linux \
+                  --registry-login-server $(acrName).azurecr.io \
+                  --registry-username $ACR_USERNAME \
+                  --registry-password $ACR_PASSWORD \
+                  --dns-name-label $(aciName) \
+                  --ports 8080 \
+                  --cpu 1 \
+                  --memory 2 \
+                  --environment-variables \
+                    DB_HOST=$(MYSQL_HOST) \
+                    DB_PORT=3306 \
+                    DB_NAME=$(mysqlDatabase) \
+                    DB_USER=$(mysqlUser) \
+                    DB_PASSWORD=$(mysqlPassword) \
+                    ConnectionStrings__DefaultConnection=Server=$(MYSQL_HOST);Port=3306;Database=$(mysqlDatabase);Uid=$(mysqlUser);Pwd=$(mysqlPassword) \
+                    ASPNETCORE_ENVIRONMENT=Production \
+                    ASPNETCORE_URLS=http://+:8080 \
+                  --restart-policy Always \
+                  --location $(location)
 
-                      echo " Deploy concluído!"
-                      echo " URL: http://$(aciName).$(location).azurecontainer.io:8080"
+                echo " Deploy concluído!"
+                echo " URL: http://$(aciName).$(location).azurecontainer.io:8080"
 
-                - task: AzureCLI@2
-                  displayName: 'Verificar Status do Deploy'
-                  inputs:
-                    azureSubscription: '$(azureSubscription)'
-                    scriptType: 'bash'
-                    scriptLocation: 'inlineScript'
-                    inlineScript: |
-                      echo " Verificando status do container..."
-                      az container show \
-                        --resource-group $(resourceGroup) \
-                        --name $(aciName) \
-                        --query "{Status:instanceView.state, FQDN:ipAddress.fqdn, IP:ipAddress.ip}" \
-                        -o table
+          - task: AzureCLI@2
+            displayName: 'Verificar Status do Deploy'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo " Verificando status do container..."
+                az container show \
+                  --resource-group $(resourceGroup) \
+                  --name $(aciName) \
+                  --query "{Status:instanceView.state, FQDN:ipAddress.fqdn, IP:ipAddress.ip}" \
+                  -o table
 
-                      echo ""
-                      echo " Logs do container (últimas 50 linhas):"
-                      az container logs \
-                        --resource-group $(resourceGroup) \
-                        --name $(aciName) | tail -n 50
+                echo ""
+                echo " Logs do container (últimas 50 linhas):"
+                az container logs \
+                  --resource-group $(resourceGroup) \
+                  --name $(aciName) | tail -n 50

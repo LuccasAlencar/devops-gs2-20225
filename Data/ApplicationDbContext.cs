@@ -17,12 +17,11 @@ public class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Configuração compatível com MySQL e Oracle
+        // Configuração para MySQL
         modelBuilder.Entity<User>(entity =>
         {
-            // Nome da tabela em minúsculas para MySQL, maiúsculas para Oracle
-            var tableName = Database.IsMySql() ? "users" : "USERS";
-            entity.ToTable(tableName);
+            // Nome da tabela em minúsculas (padrão MySQL)
+            entity.ToTable("users");
             
             entity.HasIndex(e => e.Email)
                 .IsUnique();
@@ -42,7 +41,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Phone)
                 .HasMaxLength(20);
 
-            // Usar CURRENT_TIMESTAMP para ambos os bancos
+            // Usar CURRENT_TIMESTAMP para MySQL
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
 

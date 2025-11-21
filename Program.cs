@@ -33,49 +33,24 @@ try
     // Configurar Serilog
     builder.Host.UseSerilog();
 
-    // Detectar qual banco de dados usar
-    // Prioridade: FORCE_MYSQL (para migrations) > MYSQL_HOST (Azure) > ORACLE_DATA_SOURCE (Local) > appsettings.json
-    var forceMySQL = Environment.GetEnvironmentVariable("FORCE_MYSQL");
-    var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
-    var oracleDataSource = Environment.GetEnvironmentVariable("ORACLE_DATA_SOURCE");
-    var oracleUserId = Environment.GetEnvironmentVariable("ORACLE_USER_ID");
-    var oraclePassword = Environment.GetEnvironmentVariable("ORACLE_PASSWORD");
+    // Detectar se está em modo design-time (migrations)
+    var isDesignTime = args.Contains("--design-time");
     
-    string connectionString = "";
+    // Configuração do MySQL (Azure ou Local)
+    Log.Information("Configurando Azure Database for MySQL");
     
-    if (!string.IsNullOrEmpty(forceMySQL) || !string.IsNullOrEmpty(mysqlHost))
-    {
-        // Usar MySQL (Azure)
-        Log.Information("Usando Azure Database for MySQL");
-        var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
-        var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE");
-        var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER");
-        var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD");
-        
-        connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};Uid={mysqlUser};Pwd={mysqlPassword};SslMode=Required;";
-        
-        builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
-    }
-    else if (!string.IsNullOrEmpty(oracleDataSource) && !string.IsNullOrEmpty(oracleUserId))
-    {
-        // Usar Oracle (Local)
-        Log.Information("Usando Oracle Database (Local)");
-        connectionString = $"User Id={oracleUserId};Password={oraclePassword};Data Source={oracleDataSource};";
-        
-        builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseOracle(connectionString));
-    }
-    else
-    {
-        // Fallback para appsettings.json
-        Log.Information("Usando configuração padrão do appsettings.json");
-        connectionString = builder.Configuration.GetConnectionString("MySqlConnection") 
-            ?? builder.Configuration.GetConnectionString("OracleConnection") ?? "";
-        
-        builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
-    }
+    var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST") ?? "localhost";
+    var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
+    var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "dotnet_gs2";
+    var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "root";
+    var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "password";
+    
+    // Usar SslMode=Required apenas para Azure, usar None para localhost
+    var sslMode = mysqlHost.Contains("azure") ? "Required" : "None";
+    string connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};Uid={mysqlUser};Pwd={mysqlPassword};SslMode={sslMode};";
+    
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
     // Dependency Injection
     builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -153,7 +128,7 @@ try
         {
             Title = "Users API - V1",
             Version = "v1",
-            Description = "API RESTful buscadora de vagas com Adzuna, desenvolvida em .NET 8 com Oracle Database. ",
+            Description = "API RESTful buscadora de vagas com Adzuna, desenvolvida em .NET 8 com MySQL Database.",
             Contact = new OpenApiContact
             {
                 Name = "Suporte API",
@@ -165,7 +140,7 @@ try
         {
             Title = "Users API - V2",
             Version = "v2",
-            Description = "API RESTful buscadora de vagas com Adzuna, desenvolvida em .NET 8 com Oracle Database. - Versão 2 (Melhorada)",
+            Description = "API RESTful buscadora de vagas com Adzuna, desenvolvida em .NET 8 com MySQL Database - Versão 2 (Melhorada)",
             Contact = new OpenApiContact
             {
                 Name = "Suporte API",

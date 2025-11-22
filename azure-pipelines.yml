@@ -273,45 +273,26 @@ stages:
                 echo " Aguardando MySQL iniciar..."
                 sleep 60
                 
-                # Dividir script SQL em chunks menores (< 4500 chars cada)
+                # Executar script SQL diretamente
                 SCRIPT_FILE="$(Build.SourcesDirectory)/scripts/script-bd.sql"
                 
-                # Criar arquivo temporário com comandos divididos
-                cat "$SCRIPT_FILE" | awk '
-                BEGIN { chunk = ""; len = 0; cmd_num = 0 }
-                {
-                  if (length(chunk) + length($0) + 1 > 4500) {
-                    if (chunk != "") {
-                      print "CHUNK_" cmd_num ":" chunk
-                      cmd_num++
-                      chunk = ""
-                    }
-                  }
-                  chunk = chunk $0 "\n"
-                }
-                END {
-                  if (chunk != "") {
-                    print "CHUNK_" cmd_num ":" chunk
-                  }
-                }
-                ' > /tmp/sql_chunks.txt
+                # Converter script inteiro para base64
+                SCRIPT_B64=$(base64 -w 0 < "$SCRIPT_FILE")
                 
-                # Executar cada chunk
-                while IFS=':' read -r chunk_name chunk_sql; do
-                  if [ -z "$chunk_sql" ]; then continue; fi
-                  
-                  echo "Executando $chunk_name..."
-                  CHUNK_B64=$(echo "$chunk_sql" | base64 -w 0)
-                  
+                # Executar no container MySQL
+                az container exec \
+                  --resource-group $(resourceGroup) \
+                  --name $(mysqlContainerName) \
+                  --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -pDevOps@2025!GS2'" 2>&1 | grep -v "Warning" || {
+                  echo " Tentando novamente em 30 segundos..."
+                  sleep 30
                   az container exec \
                     --resource-group $(resourceGroup) \
                     --name $(mysqlContainerName) \
-                    --exec-command "bash -c 'echo $CHUNK_B64 | base64 -d | mysql -u root -pDevOps@2025!GS2'" 2>&1 | grep -v "Warning" || true
-                  
-                  sleep 2
-                done < /tmp/sql_chunks.txt
+                    --exec-command "bash -c 'echo $SCRIPT_B64 | base64 -d | mysql -u root -pDevOps@2025!GS2'" 2>&1 | grep -v "Warning" || true
+                }
                 
-                echo " Script SQL executado com sucesso"
+                echo " Script SQL executado"
 
           - task: AzureCLI@2
             displayName: 'Deploy to ACI'
@@ -356,7 +337,6 @@ stages:
                     MYSQL_DATABASE=$(mysqlDatabase) \
                     MYSQL_USER=$(mysqlUser) \
                     MYSQL_PASSWORD=$(mysqlPassword) \
-                    ConnectionStrings__DefaultConnection=Server=$(MYSQL_HOST);Port=3306;Database=$(mysqlDatabase);Uid=$(mysqlUser);Pwd=$(mysqlPassword) \
                     ASPNETCORE_ENVIRONMENT=Production \
                     ASPNETCORE_URLS=http://+:8080 \
                   --restart-policy Always \

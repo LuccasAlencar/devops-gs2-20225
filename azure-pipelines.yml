@@ -200,6 +200,14 @@ stages:
                     --location $(location)
                   echo " Azure Container Registry criado"
                 fi
+                
+                # Habilitar admin user no ACR
+                echo " Habilitando admin user no ACR..."
+                az acr update \
+                  --resource-group $(resourceGroup) \
+                  --name $(acrName) \
+                  --admin-enabled true
+                echo " Admin user habilitado"
 
           - task: AzureCLI@2
             displayName: 'Verificar/Criar MySQL Container Instance'
@@ -223,6 +231,7 @@ stages:
                     --resource-group $(resourceGroup) \
                     --name $(mysqlContainerName) \
                     --image mysql:8.0 \
+                    --os-type Linux \
                     --dns-name-label mysql-$(resourceGroup) \
                     --ports 3306 \
                     --cpu 1 \

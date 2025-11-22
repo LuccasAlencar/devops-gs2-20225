@@ -48,32 +48,24 @@ try
     // Configuração do MySQL (Azure ou Local)
     Log.Information("Configurando Azure Database for MySQL");
     
-    // Tentar obter connection string do appsettings ou variáveis de ambiente
-    string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    // Forçar uso de variáveis de ambiente individuais (para Azure Container Instance)
+    var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST") ?? "localhost";
+    var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
+    var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "dotnet_gs2";
+    var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "root";
+    var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "password";
     
-    if (string.IsNullOrEmpty(connectionString))
-    {
-        // Fallback para variáveis de ambiente individuais
-        var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST") ?? "localhost";
-        var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
-        var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "dotnet_gs2";
-        var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "root";
-        var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "password";
-        
-        Log.Information("Variáveis de conexão MySQL carregadas:");
-        Log.Information("  Host: {Host}", mysqlHost);
-        Log.Information("  Port: {Port}", mysqlPort);
-        Log.Information("  Database: {Database}", mysqlDatabase);
-        Log.Information("  User: {User}", mysqlUser);
-        
-        // Usar SslMode=Required apenas para Azure, usar None para localhost
-        var sslMode = mysqlHost.Contains("azure") ? "Required" : "None";
-        connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};Uid={mysqlUser};Pwd={mysqlPassword};SslMode={sslMode};";
-    }
-    else
-    {
-        Log.Information("Connection string obtida de variáveis de ambiente");
-    }
+    Log.Information("Variáveis de conexão MySQL carregadas:");
+    Log.Information("  Host: {Host}", mysqlHost);
+    Log.Information("  Port: {Port}", mysqlPort);
+    Log.Information("  Database: {Database}", mysqlDatabase);
+    Log.Information("  User: {User}", mysqlUser);
+    
+    // Usar SslMode=Required apenas para Azure, usar None para localhost
+    var sslMode = mysqlHost.Contains("azure") ? "Required" : "None";
+    string connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};Uid={mysqlUser};Pwd={mysqlPassword};SslMode={sslMode};";
+    
+    Log.Information("Connection string construída a partir de variáveis de ambiente");
     
     Log.Information("Connection string configurada: {ConnectionString}", 
         System.Text.RegularExpressions.Regex.Replace(connectionString, @"Pwd=[^;]+", "Pwd=***"));

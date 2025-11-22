@@ -303,6 +303,14 @@ stages:
               inlineScript: |
                 echo " Iniciando deploy no Azure Container Instance..."
                 
+                # Obter FQDN do MySQL
+                MYSQL_HOST=$(az container show \
+                  --resource-group $(resourceGroup) \
+                  --name $(mysqlContainerName) \
+                  --query "ipAddress.fqdn" -o tsv)
+                
+                echo "MySQL Host para deploy: $MYSQL_HOST"
+                
                 # Obter credenciais do ACR
                 ACR_USERNAME=$(az acr credential show \
                   --name $(acrName) \
@@ -332,7 +340,7 @@ stages:
                   --cpu 1 \
                   --memory 2 \
                   --environment-variables \
-                    MYSQL_HOST=$(MYSQL_HOST) \
+                    MYSQL_HOST=$MYSQL_HOST \
                     MYSQL_PORT=3306 \
                     MYSQL_DATABASE=$(mysqlDatabase) \
                     MYSQL_USER=$(mysqlUser) \
